@@ -1,12 +1,26 @@
-// app.js (module) - SPA using Firebase Auth + Firestore (no Storage)
+// app.js - Firebase Modular SDK (v9+)
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
 import {
-  getFirestore, collection, addDoc, doc, getDoc, getDocs,
-  query, orderBy, serverTimestamp, updateDoc, deleteDoc
+  getAuth,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
+import {
+  getFirestore,
+  collection,
+  addDoc,
+  getDocs,
+  getDoc,
+  doc,
+  updateDoc,
+  deleteDoc,
+  query,
+  orderBy,
+  serverTimestamp
 } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
 
-/* ---------- FIREBASE CONFIG (keep your project's object) ---------- */
+/* ====== FIREBASE CONFIG - replace with your own ====== */
 const firebaseConfig = {
   apiKey: "AIzaSyAm7BymAwSe3IxpI-AQ95g6a1JIo8TcBK8",
   authDomain: "rosarys-rose-garden.firebaseapp.com",
@@ -16,307 +30,254 @@ const firebaseConfig = {
   appId: "1:180889677592:web:4039a51e092d706196b86d",
   measurementId: "G-J26L15CMPT"
 };
-/* ------------------------------------------------------------------ */
+/* ==================================================== */
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-function qs(sel, el=document){ return el && el.querySelector ? el.querySelector(sel) : null; }
-function qsa(sel, el=document){ return el && el.querySelectorAll ? Array.from(el.querySelectorAll(sel)) : []; }
-
-function usernameToEmail(username){ return `${username}@rosary.local`; }
-
 let currentUser = null;
 
-/* ---------- Views ---------- */
+/* --------- Helpers --------- */
+function qs(sel, el=document){ return el.querySelector(sel) }
+function qsa(sel, el=document){ return Array.from(el.querySelectorAll(sel)) }
+
+function usernameToEmail(username){
+  return `${username}@rosary.local`;
+}
+
+/* --------- Views --------- */
 function showView(name){
   ['home','posts','post','admin'].forEach(n=>{
-    const el = qs('#view-'+n);
+    const el = qs('#view-' + n);
     if(!el) return;
-    const show = n===name;
+    const show = n === name;
     el.style.display = show ? 'block' : 'none';
     el.setAttribute('aria-hidden', show ? 'false' : 'true');
   });
+  updateCreateButton();
   closeModal();
-  updateCreateBtnVisibility();
-  if (name === 'posts') renderPostsList();
-}
-function navigateTo(hash){ location.hash = hash; handleRouting(); }
-function handleRouting(){
-  const hash = location.hash || '#/';
-  if (hash === '#/' || hash === '') showView('home');
-  else if (hash.startsWith('#/posts')) showView('posts');
-  else if (hash.startsWith('#/post/')) {
-    const id = decodeURIComponent(hash.split('/')[2] || '');
-    showView('post'); renderPostDetail(id);
-  } else if (hash.startsWith('#/admin')) showView('admin');
-  else showView('home');
 }
 
-/* ---------- Auth UI ---------- */
+function updateCreateButton(){
+  const btn = qs('#btn-create');
+  btn.style.display = (currentUser && location.hash.startsWith('#/posts')) ? 'inline-block' : 'none';
+}
+
+/* --------- Auth UI --------- */
 function updateAuthArea(){
   const area = qs('#auth-area');
-  if (!area) return;
   area.innerHTML = '';
-  if (currentUser) {
-    const span = document.createElement('span'); span.className = 'muted';
+  if(currentUser){
+    const span = document.createElement('span');
     span.textContent = `Signed in as ${currentUser.email}`;
+    span.className = 'muted';
     area.appendChild(span);
-    const out = document.createElement('button'); out.className = 'btn small'; out.textContent = 'Sign out';
+
+    const out = document.createElement('button');
+    out.textContent = 'Sign out';
+    out.className = 'btn small';
     out.style.marginLeft = '8px';
-    out.onclick = async ()=> { try { await signOut(auth); navigateTo('#/'); } catch(err){ console.error(err); alert('Sign out failed'); } };
+    out.onclick = async ()=> {
+      await signOut(auth);
+      navigateTo('#/');
+    };
     area.appendChild(out);
   } else {
-    const login = document.createElement('button'); login.className = 'btn small'; login.textContent = 'Sign in';
-    login.onclick = ()=> navigateTo('#/admin');
-    area.appendChild(login);
+    const loginBtn = document.createElement('button');
+    loginBtn.textContent = 'Sign in';
+    loginBtn.className = 'btn small';
+    loginBtn.onclick = ()=> navigateTo('#/admin');
+    area.appendChild(loginBtn);
   }
-  updateCreateBtnVisibility();
-}
-function updateCreateBtnVisibility(){
-  const btn = qs('#btn-create'); if (!btn) return;
-  if (currentUser && location.hash.startsWith('#/posts')) btn.style.display = 'inline-block';
-  else btn.style.display = 'none';
+  updateCreateButton();
 }
 
-/* ---------- Posts ---------- */
+/* --------- Posts --------- */
 async function fetchPosts(){
-  const col = collection(db,'posts');
-  const q = query(col, orderBy('created_at','desc'));
+  const q = query(collection(db,'posts'), orderBy('created_at','desc'));
   const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  return snap.docs.map(d=>({ id: d.id, ...d.data() }));
 }
 
 async function renderPostsList(){
-  const list = qs('#post-list'); if (!list) return;
+  const list = qs('#post-list');
+  const noPosts = qs('#no-posts');
   list.innerHTML = '';
-  try {
-    const posts = await fetchPosts();
-    if (!posts || posts.length === 0) { qs('#no-posts') && (qs('#no-posts').style.display = 'block'); return; }
-    qs('#no-posts') && (qs('#no-posts').style.display = 'none');
-    posts.forEach(p=>{
-      const li = document.createElement('li'); li.className = 'post-item';
-      const a = document.createElement('a'); a.className='post-link';
-      a.href = '#/post/' + encodeURIComponent(p.id);
-      a.onclick = (e)=>{ e.preventDefault(); navigateTo('#/post/'+encodeURIComponent(p.id)); };
-      const title = document.createElement('div'); title.className='post-title'; title.textContent = p.title;
-      const meta = document.createElement('div'); meta.className='post-meta';
-      const createdAt = p.created_at && p.created_at.toDate ? p.created_at.toDate() : new Date(p.created_at || Date.now());
-      meta.textContent = createdAt.toLocaleString();
-      const excerpt = document.createElement('div'); excerpt.className='post-excerpt';
-      const tmp = document.createElement('div'); tmp.innerHTML = p.body || ''; const text = tmp.textContent || tmp.innerText || '';
-      excerpt.textContent = text.length > 160 ? text.slice(0,160) + '…' : text;
-      a.appendChild(title); a.appendChild(meta); a.appendChild(excerpt);
-      li.appendChild(a); list.appendChild(li);
-    });
-  } catch (err) { console.error('renderPostsList error', err); alert('Failed to load posts (see console).'); }
-}
-
-/* ---------- Post detail ---------- */
-async function renderPostDetail(postId){
-  const container = qs('#post-detail'); if (!container) return;
-  container.innerHTML = '';
-  try {
-    const d = await getDoc(doc(db,'posts',postId));
-    if (!d.exists()) { container.innerHTML = '<p>Post not found.</p>'; return; }
-    const p = { id: d.id, ...d.data() };
-    const h = document.createElement('h1'); h.textContent = p.title;
-    const meta = document.createElement('div'); meta.className = 'post-meta';
+  let posts = [];
+  try { posts = await fetchPosts(); } catch(e){ console.error(e); alert('Failed to load posts'); return; }
+  if(posts.length === 0){ noPosts.style.display='block'; return; } 
+  else noPosts.style.display='none';
+  
+  posts.forEach(p=>{
+    const li = document.createElement('li'); li.className='post-item';
+    const a = document.createElement('a'); a.href='#/post/'+encodeURIComponent(p.id);
+    a.className='post-link';
+    a.onclick = e=>{ e.preventDefault(); navigateTo('#/post/'+encodeURIComponent(p.id)); };
+    
+    const title = document.createElement('div'); title.className='post-title'; title.textContent=p.title;
+    const meta = document.createElement('div'); meta.className='post-meta';
     const createdAt = p.created_at && p.created_at.toDate ? p.created_at.toDate() : new Date(p.created_at || Date.now());
     meta.textContent = createdAt.toLocaleString();
-    const body = document.createElement('div'); body.className = 'post-body'; body.innerHTML = p.body || '';
-    container.appendChild(h); container.appendChild(meta); container.appendChild(body);
+    
+    const excerpt = document.createElement('div'); excerpt.className='post-excerpt';
+    const tmp = document.createElement('div'); tmp.innerHTML=p.body||''; excerpt.textContent = (tmp.textContent||'').slice(0,160)+'…';
+    
+    a.append(title,meta,excerpt);
+    li.appendChild(a);
+    list.appendChild(li);
+  });
+}
 
-    if (currentUser) {
-      const controls = document.createElement('div'); controls.style.marginTop = '1rem';
-      const editBtn = document.createElement('button'); editBtn.className = 'btn small'; editBtn.textContent = 'Edit';
-      editBtn.onclick = ()=> openModalForEdit(p.id, p);
-      const delBtn = document.createElement('button'); delBtn.className = 'btn small'; delBtn.style.marginLeft='8px'; delBtn.textContent='Delete';
-      delBtn.onclick = async ()=> {
-        if (!confirm('Delete this post?')) return;
+async function renderPostDetail(postId){
+  const container = qs('#post-detail');
+  container.innerHTML = '';
+  try{
+    const d = await getDoc(doc(db,'posts',postId));
+    if(!d.exists()){ container.innerHTML='<p>Post not found.</p>'; return; }
+    const p = { id:d.id, ...d.data() };
+    const h = document.createElement('h1'); h.textContent=p.title;
+    const meta = document.createElement('div'); meta.className='post-meta';
+    const createdAt = p.created_at && p.created_at.toDate ? p.created_at.toDate() : new Date(p.created_at||Date.now());
+    meta.textContent=createdAt.toLocaleString();
+    const body = document.createElement('div'); body.className='post-body'; body.innerHTML=p.body||'';
+    container.append(h,meta,body);
+
+    if(currentUser){
+      const controls = document.createElement('div'); controls.style.marginTop='1rem';
+      const editBtn = document.createElement('button'); editBtn.className='btn small'; editBtn.textContent='Edit';
+      editBtn.onclick = ()=> openModalForEdit(p.id,p);
+      const delBtn = document.createElement('button'); delBtn.className='btn small'; delBtn.style.marginLeft='8px'; delBtn.textContent='Delete';
+      delBtn.onclick = async ()=>{
+        if(!confirm('Delete this post?')) return;
         try { await deleteDoc(doc(db,'posts',p.id)); alert('Deleted'); navigateTo('#/posts'); }
-        catch(err){ console.error('Delete failed', err); alert('Delete failed (see console).'); }
+        catch(err){ console.error(err); alert('Delete failed'); }
       };
-      controls.appendChild(editBtn); controls.appendChild(delBtn);
+      controls.append(editBtn,delBtn);
       container.appendChild(controls);
     }
-  } catch (err) { console.error('renderPostDetail error', err); container.innerHTML = '<p>Failed to load post.</p>'; }
+  }catch(err){ console.error(err); container.innerHTML='<p>Failed to load post.</p>'; }
 }
 
-/* ---------- Modal & Editor ---------- */
+/* --------- Modal --------- */
 function openModal(){
-  if (!currentUser) { alert('Sign in first'); navigateTo('#/admin'); return; }
-  qs('#modal-title') && (qs('#modal-title').textContent = 'New Post');
-  qs('#modal-save') && (qs('#modal-save').textContent = 'Publish');
-  const f = qs('#new-post-form'); if (f) f.dataset.editId = '';
-  qs('#post-title') && (qs('#post-title').value = '');
-  qs('#post-body') && (qs('#post-body').innerHTML = '');
-  qs('#modal') && qs('#modal').setAttribute('aria-hidden','false');
+  if(!currentUser){ alert('Sign in first'); navigateTo('#/admin'); return; }
+  qs('#modal-title').textContent='New Post';
+  qs('#modal-save').textContent='Publish';
+  qs('#new-post-form').dataset.editId='';
+  qs('#post-title').value='';
+  qs('#post-body').innerHTML='';
+  qs('#modal').setAttribute('aria-hidden','false');
 }
-function openModalForEdit(postId, postObj){
-  qs('#modal-title') && (qs('#modal-title').textContent = 'Edit Post');
-  qs('#modal-save') && (qs('#modal-save').textContent = 'Save Changes');
-  const f = qs('#new-post-form'); if (f) f.dataset.editId = postId;
-  qs('#post-title') && (qs('#post-title').value = postObj.title || '');
-  qs('#post-body') && (qs('#post-body').innerHTML = postObj.body || '');
-  qs('#modal') && qs('#modal').setAttribute('aria-hidden','false');
+
+function openModalForEdit(postId, post){
+  qs('#modal-title').textContent='Edit Post';
+  qs('#modal-save').textContent='Save Changes';
+  qs('#new-post-form').dataset.editId=postId;
+  qs('#post-title').value=post.title||'';
+  qs('#post-body').innerHTML=post.body||'';
+  qs('#modal').setAttribute('aria-hidden','false');
 }
+
 function closeModal(){
-  qs('#modal') && qs('#modal').setAttribute('aria-hidden','true');
-  const form = qs('#new-post-form'); if (form) form.reset();
-  qs('#post-body') && (qs('#post-body').innerHTML = '');
+  qs('#modal').setAttribute('aria-hidden','true');
+  qs('#post-body').innerHTML='';
+  qs('#new-post-form').reset();
 }
 
-/* Fallback text wrap when execCommand is not supported */
-function applySimpleWrap(command){
-  const sel = window.getSelection();
-  if (!sel || sel.rangeCount === 0) return;
-  const range = sel.getRangeAt(0);
-  const selected = range.toString();
-  if (!selected) return alert('Select text first.');
-  let el;
-  if (command === 'bold') el = document.createElement('strong');
-  else if (command === 'italic') el = document.createElement('em');
-  else if (command === 'underline') el = document.createElement('u');
-  else return;
-  el.textContent = selected;
-  range.deleteContents();
-  range.insertNode(el);
-  sel.removeAllRanges();
-}
-
-/* Setup toolbar */
+/* --------- Editor toolbar --------- */
 function setupEditorToolbar(){
   qsa('#editor-toolbar [data-cmd]').forEach(btn=>{
-    btn.addEventListener('click', ()=> {
-      const cmd = btn.getAttribute('data-cmd');
-      try {
-        if (typeof document.execCommand === 'function') {
-          const ok = document.execCommand(cmd, false, null);
-          if (!ok) applySimpleWrap(cmd);
-        } else applySimpleWrap(cmd);
-      } catch (err) { console.warn('execCommand failed', err); applySimpleWrap(cmd); }
-      qs('#post-body') && qs('#post-body').focus();
+    btn.addEventListener('click',()=> {
+      document.execCommand(btn.dataset.cmd,false,null);
+      qs('#post-body').focus();
     });
   });
 
-  const insertLink = qs('#insert-link');
-  if (insertLink) insertLink.addEventListener('click', ()=>{
-    const url = prompt('Enter URL (https://...)');
-    if (!url) return;
-    try { if (typeof document.execCommand === 'function') document.execCommand('createLink', false, url); else alert('Select text and paste link manually.'); }
-    catch (err) { console.warn(err); alert('Could not create link automatically.'); }
+  qs('#insert-link').addEventListener('click',()=>{
+    const url = prompt('Enter URL (https://...)'); if(!url) return;
+    document.execCommand('createLink',false,url);
   });
 
-  const insertImage = qs('#insert-image');
-  if (insertImage) insertImage.addEventListener('click', ()=>{
-    const url = prompt('Enter image URL (https://...)');
-    if (!url) return;
-    const img = document.createElement('img'); img.src = url; img.style.maxWidth = '100%';
+  qs('#insert-image').addEventListener('click',()=>{
+    const url = prompt('Enter image URL (https://...)'); if(!url) return;
+    const img = document.createElement('img'); img.src=url; img.style.maxWidth='100%';
     const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0) qs('#post-body') && qs('#post-body').appendChild(img);
-    else { const range = sel.getRangeAt(0); range.deleteContents(); range.insertNode(img); }
+    if(!sel || sel.rangeCount===0) qs('#post-body').appendChild(img);
+    else sel.getRangeAt(0).insertNode(img);
   });
 }
 
-/* ---------- Create / Update ---------- */
+/* --------- Create / Update Post --------- */
 async function createOrUpdatePost(ev){
   ev.preventDefault();
-  if (!currentUser) { alert('Sign in first'); navigateTo('#/admin'); return; }
-  const titleEl = qs('#post-title'); const bodyEl = qs('#post-body');
-  const title = titleEl ? titleEl.value.trim() : '';
-  const body = bodyEl ? bodyEl.innerHTML : '';
-  if (!title) { alert('Title required'); return; }
-  const editId = (qs('#new-post-form') && qs('#new-post-form').dataset.editId) || '';
-  try {
-    if (editId) {
-      await updateDoc(doc(db,'posts',editId), { title, body });
+  if(!currentUser){ alert('Sign in first'); navigateTo('#/admin'); return; }
+  const title = qs('#post-title').value.trim();
+  const body = qs('#post-body').innerHTML || '';
+  if(!title){ alert('Title required'); return; }
+
+  const editId = qs('#new-post-form').dataset.editId || '';
+  try{
+    if(editId){
+      await updateDoc(doc(db,'posts',editId),{title,body});
       closeModal();
-      navigateTo('#/post/' + encodeURIComponent(editId));
-    } else {
-      const postsCol = collection(db,'posts');
-      const docRef = await addDoc(postsCol, { title, body, created_at: serverTimestamp() });
+      navigateTo('#/post/'+encodeURIComponent(editId));
+    } else{
+      const docRef = await addDoc(collection(db,'posts'),{title,body,created_at:serverTimestamp()});
       closeModal();
-      navigateTo('#/post/' + encodeURIComponent(docRef.id));
+      navigateTo('#/post/'+encodeURIComponent(docRef.id));
     }
-  } catch (err) { console.error('save failed', err); alert('Save failed: ' + (err.message || err)); }
+  }catch(err){ console.error(err); alert('Save failed: '+err.message); }
 }
 
-/* ---------- Export / Import ---------- */
-async function handleExport(){
-  try {
-    const posts = await fetchPosts();
-    const data = JSON.stringify(posts.map(p=>{ if (p.created_at && p.created_at.toDate) p.created_at = p.created_at.toDate().toISOString(); return p; }), null, 2);
-    const blob = new Blob([data], {type:'application/json'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = 'rosary_posts_export.json'; document.body.appendChild(a); a.click(); a.remove();
-    URL.revokeObjectURL(url);
-  } catch (err) { console.error('export error', err); alert('Export failed'); }
-}
-
-async function handleImportFile(file){
-  if (!file) return;
-  const r = new FileReader();
-  r.onload = async (e) => {
-    try {
-      const imported = JSON.parse(e.target.result);
-      if (!Array.isArray(imported)) throw new Error('Invalid format');
-      if (!confirm('This will add imported posts to Firestore. Continue?')) return;
-      for (const p of imported){
-        const obj = { title: p.title || 'Imported', body: p.body || '', created_at: p.created_at ? new Date(p.created_at) : serverTimestamp() };
-        await addDoc(collection(db,'posts'), obj);
-      }
-      alert('Import complete.');
-      renderPostsList();
-      navigateTo('#/posts');
-    } catch (err) { console.error('import error', err); alert('Import failed: ' + (err.message || err)); }
-  };
-  r.readAsText(file);
-}
-
-/* ---------- Login ---------- */
+/* --------- Login --------- */
 async function attemptLogin(ev){
   ev.preventDefault();
-  const username = qs('#login-username') ? qs('#login-username').value.trim() : '';
-  const pw = qs('#login-password') ? qs('#login-password').value : '';
-  if (!username) return alert('Enter a username');
+  const username = qs('#login-username').value.trim();
+  const password = qs('#login-password').value;
+  if(!username || !password) return alert('Enter username and password');
   const email = usernameToEmail(username);
-  try { await signInWithEmailAndPassword(auth, email, pw); } 
-  catch (err) { console.error('login failed', err); alert('Sign in failed: ' + (err.message || err)); }
+
+  try { await signInWithEmailAndPassword(auth,email,password); }
+  catch(err){ console.error(err); alert('Sign in failed: '+err.message); }
 }
 
-/* ---------- Init ---------- */
+/* --------- Routing --------- */
+function navigateTo(hash){ location.hash = hash; handleRouting(); }
+function handleRouting(){
+  const hash = location.hash||'#/';
+  if(hash==='#/'||hash==='') showView('home');
+  else if(hash.startsWith('#/posts')) { showView('posts'); renderPostsList(); }
+  else if(hash.startsWith('#/post/')) { showView('post'); renderPostDetail(decodeURIComponent(hash.split('/')[2]||'')); }
+  else if(hash.startsWith('#/admin')) showView('admin');
+  else showView('home');
+}
+
+/* --------- Init --------- */
 function init(){
-  // wire nav
-  qs('#nav-home') && qs('#nav-home').addEventListener('click',(e)=>{ e.preventDefault(); navigateTo('#/'); });
-  qs('#nav-posts') && qs('#nav-posts').addEventListener('click',(e)=>{ e.preventDefault(); navigateTo('#/posts'); });
-  qs('#home-signin') && qs('#home-signin').addEventListener('click', ()=> navigateTo('#/admin'));
+  qs('#nav-home').addEventListener('click',e=>{ e.preventDefault(); navigateTo('#/'); });
+  qs('#nav-posts').addEventListener('click',e=>{ e.preventDefault(); navigateTo('#/posts'); });
+  qs('#home-signin').addEventListener('click',()=>navigateTo('#/admin'));
 
-  qs('#btn-create') && qs('#btn-create').addEventListener('click', ()=> openModal());
-  qs('#modal-close') && qs('#modal-close').addEventListener('click', ()=> closeModal());
-  qs('#modal-cancel') && qs('#modal-cancel').addEventListener('click', ()=> closeModal());
-  qs('#new-post-form') && qs('#new-post-form').addEventListener('submit', createOrUpdatePost);
+  qs('#btn-create').addEventListener('click',openModal);
+  qs('#modal-close').addEventListener('click',closeModal);
+  qs('#modal-cancel').addEventListener('click',closeModal);
+  qs('#new-post-form').addEventListener('submit',createOrUpdatePost);
 
-  qs('#btn-export') && qs('#btn-export').addEventListener('click', handleExport);
-  qs('#importFile') && qs('#importFile').addEventListener('change', (e)=> { const f = e.target.files[0]; if (f) handleImportFile(f); e.target.value = ''; });
+  qs('#login-form').addEventListener('submit',attemptLogin);
+  qs('#login-cancel').addEventListener('click',()=>navigateTo('#/'));
 
-  qs('#login-form') && qs('#login-form').addEventListener('submit', attemptLogin);
-  qs('#login-cancel') && qs('#login-cancel').addEventListener('click', ()=> { navigateTo('#/'); });
-
-  qs('#back-to-posts') && qs('#back-to-posts').addEventListener('click', (e)=> { e.preventDefault(); navigateTo('#/posts'); });
+  qs('#back-to-posts').addEventListener('click',e=>{ e.preventDefault(); navigateTo('#/posts'); });
 
   setupEditorToolbar();
-  window.addEventListener('hashchange', handleRouting);
 
-  onAuthStateChanged(auth, (user)=>{ currentUser = user; updateAuthArea(); handleRouting(); });
+  onAuthStateChanged(auth,(user)=>{
+    currentUser = user;
+    updateAuthArea();
+    handleRouting();
+  });
 
   handleRouting();
 }
 
 document.addEventListener('DOMContentLoaded', init);
-
-/* small helper that uses firebase doc function */
-import { getDoc } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
-import { doc as docRef } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
-// (these imports are safe duplicates for browser module loading)
