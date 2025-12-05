@@ -1,9 +1,9 @@
 // Minimal static "blog" for GitHub Pages — stores posts in localStorage (data URLs for attachments).
-// IMPORTANT: This is client-side only. Change CONFIG.ADMIN_PASS before publishing if you want a custom password.
+// ADMIN_PASS set to the password you requested.
 const CONFIG = {
   STORAGE_KEY: 'rosary_posts_v1',
   SESSION_KEY: 'rosary_admin_logged_in',
-  ADMIN_PASS: 'verysecret' // change this in the repo before publishing if you want a different password
+  ADMIN_PASS: 'rosebushesprickle' // updated per request
 };
 
 function qs(sel, el=document) { return el.querySelector(sel) }
@@ -39,27 +39,34 @@ function updateAuthArea() {
     out.className = 'btn small';
     out.textContent = 'Sign out';
     out.style.marginLeft = '8px';
-    out.onclick = () => { setLoggedIn(false); };
+    out.onclick = () => { setLoggedIn(false); navigateTo('#/'); };
     area.appendChild(out);
-    qs('#btn-create').style.display = 'inline-block';
+    // Ensure create button visible only on posts page; show it if currently on posts
+    if (location.hash.startsWith('#/posts')) qs('#btn-create').style.display = 'inline-block';
+    else qs('#btn-create').style.display = 'none';
   } else {
     const login = document.createElement('button');
     login.className = 'btn small';
     login.textContent = 'Sign in';
-    login.onclick = () => { openLogin(); };
+    login.onclick = () => { navigateTo('#/admin'); };
     area.appendChild(login);
     qs('#btn-create').style.display = 'none';
   }
 }
 
 function showView(name) {
-  ['view-home','view-posts','view-post'].forEach(id => {
-    const el = qs('#'+id);
+  ['home','posts','post','admin'].forEach(n => {
+    const el = qs('#view-' + n);
     if (!el) return;
-    const show = id === ('view-' + name);
+    const show = n === name;
     el.style.display = show ? 'block' : 'none';
     el.setAttribute('aria-hidden', show ? 'false' : 'true');
   });
+  // hide modal whenever route changes
+  closeModal();
+  // update create button visibility on route change
+  if (isLoggedIn() && name === 'posts') qs('#btn-create').style.display = 'inline-block';
+  else qs('#btn-create').style.display = 'none';
   if (name === 'posts') renderPostsList();
 }
 
@@ -136,24 +143,20 @@ function renderPostDetail(postId) {
 }
 
 function openModal() {
+  // ensure signed in
+  if (!isLoggedIn()) { alert('You must sign in to create a post.'); navigateTo('#/admin'); return; }
   const m = qs('#modal'); m.setAttribute('aria-hidden','false');
 }
 function closeModal() {
   const m = qs('#modal'); m.setAttribute('aria-hidden','true');
-  qs('#new-post-form').reset();
-  qs('#post-files').value = '';
-}
-function openLogin() {
-  const m = qs('#login-prompt'); m.setAttribute('aria-hidden','false');
-  qs('#login-password').value = '';
-}
-function closeLogin() {
-  qs('#login-prompt').setAttribute('aria-hidden','true');
-  qs('#login-form').reset();
+  const form = qs('#new-post-form');
+  if (form) form.reset();
+  const files = qs('#post-files'); if (files) files.value = '';
 }
 
 function createPostFromForm(ev) {
   ev.preventDefault();
+  if (!isLoggedIn()) { alert('You must be signed in to create posts.'); navigateTo('#/admin'); return; }
   const title = qs('#post-title').value.trim();
   const body = qs('#post-body').value || '';
   if (!title) { alert('Title is required'); return; }
@@ -228,8 +231,8 @@ function attemptLogin(ev) {
   const pw = qs('#login-password').value || '';
   if (pw === CONFIG.ADMIN_PASS) {
     setLoggedIn(true);
-    closeLogin();
     alert('Signed in.');
+    navigateTo('#/posts');
   } else {
     alert('Invalid password.');
   }
@@ -249,6 +252,8 @@ function handleRouting() {
     const id = decodeURIComponent(hash.split('/')[2] || '');
     showView('post');
     renderPostDetail(id);
+  } else if (hash.startsWith('#/admin')) {
+    showView('admin');
   } else {
     showView('home');
   }
@@ -268,9 +273,9 @@ function init() {
   qs('#btn-export').addEventListener('click', handleExport);
   qs('#importFile').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) handleImportFile(f); e.target.value = ''; });
 
-  // login modal
+  // login view
   qs('#login-form').addEventListener('submit', attemptLogin);
-  qs('#login-cancel').addEventListener('click', ()=> closeLogin());
+  qs('#login-cancel').addEventListener('click', ()=> { navigateTo('#/'); });
 
   // route on hash change
   window.addEventListener('hashchange', handleRouting);
