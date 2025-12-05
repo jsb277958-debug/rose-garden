@@ -21,7 +21,9 @@
     <!-- Home view -->
     <section id="view-home" class="view" aria-hidden="false">
       <h1>rosary's rose garden</h1>
-      <p class="update">Welcome — simple update: site set up. Share posts with attachments (images/audio/etc.).</p>
+      <p class="update">Welcome — simple update: site set up. Share posts (admin-only posting).</p>
+      <p class="bio">A small place to collect thoughts and notes. Only the admin can post.</p>
+      <p><button id="home-signin" class="btn">Sign in</button></p>
     </section>
 
     <!-- Posts list view -->
@@ -52,6 +54,9 @@
     <section id="view-admin" class="view" aria-hidden="true">
       <h1>Admin Login</h1>
       <form id="login-form" class="form">
+        <label>Username
+          <input id="login-username" type="text" required placeholder="rosary" />
+        </label>
         <label>Password
           <input id="login-password" type="password" required />
         </label>
@@ -59,36 +64,45 @@
           <button type="submit" class="btn">Sign in</button>
           <button type="button" id="login-cancel" class="btn secondary">Cancel</button>
         </div>
-        <p class="muted small">Note: This is a client-side-only admin password stored in the page config. Change it in app.js before publishing if you want a different password.</p>
+        <p class="muted small">Username maps to an internal email like <code>username@rosary.local</code>.</p>
       </form>
     </section>
   </main>
 
-  <!-- New Post Modal -->
+  <!-- New/Edit Post Modal -->
   <div id="modal" class="modal" aria-hidden="true">
     <div class="modal-content">
       <header>
-        <h2>New Post</h2>
+        <h2 id="modal-title">New Post</h2>
         <button id="modal-close" class="btn small">✕</button>
       </header>
       <form id="new-post-form">
         <label>Title
           <input id="post-title" name="title" type="text" required />
         </label>
+
         <label>Body
-          <textarea id="post-body" name="body" rows="6"></textarea>
+          <div id="editor-toolbar" style="text-align:left; margin-bottom:.4rem;">
+            <button type="button" data-cmd="bold" class="btn small">B</button>
+            <button type="button" data-cmd="italic" class="btn small">I</button>
+            <button type="button" data-cmd="underline" class="btn small">U</button>
+            <button type="button" id="insert-link" class="btn small">Link</button>
+            <button type="button" id="insert-image" class="btn small">Image URL</button>
+          </div>
+          <div id="post-body" contenteditable="true" aria-multiline="true" rows="6" style="min-height:140px; border:1px solid #ddd; border-radius:6px; padding:.6rem; background:#fff;"></div>
         </label>
-        <label>Attachments (images, audio, other) — multiple allowed
-          <input id="post-files" name="attachments" type="file" multiple />
-        </label>
+
         <div class="modal-actions">
-          <button type="submit" class="btn">Create Post</button>
+          <button id="modal-save" type="submit" class="btn">Save Post</button>
           <button type="button" id="modal-cancel" class="btn secondary">Cancel</button>
         </div>
       </form>
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <footer class="footer">rosary's rose garden — Firebase + GitHub Pages</footer>
+
+  <!-- app as ES module -->
+  <script type="module" src="app.js"></script>
 </body>
 </html>
