@@ -1,49 +1,89 @@
-// Minimal static "blog" for GitHub Pages — stores posts in localStorage (data URLs for attachments).
-// ADMIN_PASS set to the password you requested.
-const CONFIG = {
-  STORAGE_KEY: 'rosary_posts_v1',
-  SESSION_KEY: 'rosary_admin_logged_in',
-  ADMIN_PASS: 'rosebushesprickle' // updated per request
+// app.js - Firebase modular SDK (v9+). Uses Auth + Firestore (no Storage).
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+import {
+  getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
+import {
+  getFirestore, collection, addDoc, doc, getDoc, getDocs,
+  query, orderBy, serverTimestamp, updateDoc, deleteDoc
+} from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
+
+/* ====== REPLACE THIS OBJECT with your firebaseConfig from the Firebase console ======
+   Example:
+   const FIREBASE_CONFIG = {
+     apiKey: "xxx",
+     authDomain: "yourproj.firebaseapp.com",
+     projectId: "yourproj",
+     storageBucket: "yourproj.appspot.com",
+     messagingSenderId: "...",
+     appId: "..."
+   };
+*/
+const firebaseConfig = {
+
+  apiKey: "AIzaSyAm7BymAwSe3IxpI-AQ95g6a1JIo8TcBK8",
+
+  authDomain: "rosarys-rose-garden.firebaseapp.com",
+
+  projectId: "rosarys-rose-garden",
+
+  storageBucket: "rosarys-rose-garden.firebasestorage.app",
+
+  messagingSenderId: "180889677592",
+
+  appId: "1:180889677592:web:4039a51e092d706196b86d",
+
+  measurementId: "G-J26L15CMPT"
+
 };
+
+/* ================================================================================== */
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
 function qs(sel, el=document) { return el.querySelector(sel) }
 function qsa(sel, el=document) { return Array.from(el.querySelectorAll(sel)) }
 
-function loadPosts() {
-  try {
-    const raw = localStorage.getItem(CONFIG.STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch (e) {
-    console.error('Failed to parse posts', e);
-    return [];
-  }
-}
-function savePosts(posts) {
-  localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(posts));
+function usernameToEmail(username){
+  return `${username}@rosary.local`;
 }
 
-function generateId() { return 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2,6); }
+let currentUser = null;
 
-function isLoggedIn() { return sessionStorage.getItem(CONFIG.SESSION_KEY) === '1'; }
-function setLoggedIn(v) { if (v) sessionStorage.setItem(CONFIG.SESSION_KEY, '1'); else sessionStorage.removeItem(CONFIG.SESSION_KEY); updateAuthArea(); }
+/* Views */
+function showView(name){
+  ['home','posts','post','admin'].forEach(n=>{
+    const el = qs('#view-'+n);
+    if(!el) return;
+    const show = n===name;
+    el.style.display = show ? 'block' : 'none';
+    el.setAttribute('aria-hidden', show ? 'false' : 'true');
+  });
+  closeModal();
+  const createBtn = qs('#btn-create');
+  if (currentUser && location.hash.startsWith('#/posts')) createBtn.style.display = 'inline-block';
+  else createBtn.style.display = 'none';
+  if (name === 'posts') renderPostsList();
+}
 
-function updateAuthArea() {
+/* Auth UI area */
+function updateAuthArea(){
   const area = qs('#auth-area');
   area.innerHTML = '';
-  if (isLoggedIn()) {
+  if (currentUser) {
     const span = document.createElement('span');
     span.className = 'muted';
-    span.textContent = 'Signed in';
+    span.textContent = `Signed in as ${currentUser.email}`;
     area.appendChild(span);
     const out = document.createElement('button');
     out.className = 'btn small';
     out.textContent = 'Sign out';
     out.style.marginLeft = '8px';
-    out.onclick = () => { setLoggedIn(false); navigateTo('#/'); };
+    out.onclick = async () => { await signOut(auth); navigateTo('#/'); };
     area.appendChild(out);
-    // Ensure create button visible only on posts page; show it if currently on posts
     if (location.hash.startsWith('#/posts')) qs('#btn-create').style.display = 'inline-block';
-    else qs('#btn-create').style.display = 'none';
   } else {
     const login = document.createElement('button');
     login.className = 'btn small';
@@ -54,236 +94,253 @@ function updateAuthArea() {
   }
 }
 
-function showView(name) {
-  ['home','posts','post','admin'].forEach(n => {
-    const el = qs('#view-' + n);
-    if (!el) return;
-    const show = n === name;
-    el.style.display = show ? 'block' : 'none';
-    el.setAttribute('aria-hidden', show ? 'false' : 'true');
-  });
-  // hide modal whenever route changes
-  closeModal();
-  // update create button visibility on route change
-  if (isLoggedIn() && name === 'posts') qs('#btn-create').style.display = 'inline-block';
-  else qs('#btn-create').style.display = 'none';
-  if (name === 'posts') renderPostsList();
+/* Fetch posts from Firestore */
+async function fetchPosts(){
+  const col = collection(db, 'posts');
+  const q = query(col, orderBy('created_at','desc'));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
-function renderPostsList() {
-  const posts = loadPosts();
+async function renderPostsList(){
   const list = qs('#post-list');
   list.innerHTML = '';
+  let posts = [];
+  try { posts = await fetchPosts(); } catch (e){ console.error(e); alert('Failed to load posts'); return; }
   if (!posts || posts.length === 0) {
     qs('#no-posts').style.display = 'block';
     return;
-  } else {
-    qs('#no-posts').style.display = 'none';
-  }
-  posts.slice().sort((a,b)=> (b.created_at - a.created_at)).forEach(p => {
-    const li = document.createElement('li');
-    li.className = 'post-item';
-    const a = document.createElement('a');
-    a.className = 'post-link';
+  } else qs('#no-posts').style.display = 'none';
+  posts.forEach(p=>{
+    const li = document.createElement('li'); li.className = 'post-item';
+    const a = document.createElement('a'); a.className='post-link';
     a.href = '#/post/' + encodeURIComponent(p.id);
-    a.onclick = (e) => { e.preventDefault(); navigateTo('#/post/' + encodeURIComponent(p.id)); };
-    const title = document.createElement('div');
-    title.className = 'post-title';
-    title.textContent = p.title;
-    const meta = document.createElement('div');
-    meta.className = 'post-meta';
-    meta.textContent = new Date(p.created_at).toLocaleString();
-    const excerpt = document.createElement('div');
-    excerpt.className = 'post-excerpt';
-    const body = (p.body || '');
-    excerpt.textContent = body.length > 160 ? body.slice(0,160) + '…' : body;
-    a.appendChild(title);
-    a.appendChild(meta);
-    a.appendChild(excerpt);
-    li.appendChild(a);
-    list.appendChild(li);
+    a.onclick = (e)=>{ e.preventDefault(); navigateTo('#/post/'+encodeURIComponent(p.id)); };
+    const title = document.createElement('div'); title.className='post-title'; title.textContent = p.title;
+    const meta = document.createElement('div'); meta.className='post-meta';
+    const createdAt = p.created_at && p.created_at.toDate ? p.created_at.toDate() : new Date(p.created_at || Date.now());
+    meta.textContent = createdAt.toLocaleString();
+    const excerpt = document.createElement('div'); excerpt.className='post-excerpt';
+    const tmp = document.createElement('div'); tmp.innerHTML = p.body || ''; const text = tmp.textContent || tmp.innerText || '';
+    excerpt.textContent = text.length > 160 ? text.slice(0,160) + '…' : text;
+    a.appendChild(title); a.appendChild(meta); a.appendChild(excerpt);
+    li.appendChild(a); list.appendChild(li);
   });
 }
 
-function renderPostDetail(postId) {
-  const posts = loadPosts();
-  const p = posts.find(x => x.id === postId);
-  const container = qs('#post-detail');
-  container.innerHTML = '';
-  if (!p) {
-    container.innerHTML = '<p>Post not found.</p>';
-    return;
-  }
-  const h = document.createElement('h1'); h.textContent = p.title;
-  const meta = document.createElement('div'); meta.className = 'post-meta'; meta.textContent = new Date(p.created_at).toLocaleString();
-  const body = document.createElement('div'); body.className = 'post-body'; const pre = document.createElement('pre'); pre.textContent = p.body || ''; body.appendChild(pre);
-  container.appendChild(h); container.appendChild(meta); container.appendChild(body);
+/* Show a single post */
+async function renderPostDetail(postId){
+  const container = qs('#post-detail'); container.innerHTML = '';
+  try {
+    const d = await getDoc(doc(db,'posts',postId));
+    if (!d.exists()) { container.innerHTML = '<p>Post not found.</p>'; return; }
+    const p = { id: d.id, ...d.data() };
+    const h = document.createElement('h1'); h.textContent = p.title;
+    const meta = document.createElement('div'); meta.className = 'post-meta';
+    const createdAt = p.created_at && p.created_at.toDate ? p.created_at.toDate() : new Date(p.created_at || Date.now());
+    meta.textContent = createdAt.toLocaleString();
+    const body = document.createElement('div'); body.className = 'post-body'; body.innerHTML = p.body || '';
+    container.appendChild(h); container.appendChild(meta); container.appendChild(body);
 
-  if (p.attachments && p.attachments.length) {
-    const h3 = document.createElement('h3'); h3.textContent = 'Attachments';
-    container.appendChild(h3);
-    const ul = document.createElement('ul'); ul.className = 'attachments';
-    p.attachments.forEach(a => {
-      const li = document.createElement('li');
-      if (a.type && a.type.startsWith('image/')) {
-        const link = document.createElement('a'); link.href = a.data; link.target = '_blank';
-        const img = document.createElement('img'); img.src = a.data; img.alt = a.name; img.className = 'post-image';
-        link.appendChild(img); li.appendChild(link);
-        const cap = document.createElement('div'); cap.textContent = a.name; li.appendChild(cap);
-      } else if (a.type && a.type.startsWith('audio/')) {
-        const cap = document.createElement('div'); cap.textContent = a.name; li.appendChild(cap);
-        const audio = document.createElement('audio'); audio.controls = true; audio.src = a.data; li.appendChild(audio);
-      } else {
-        const link = document.createElement('a'); link.href = a.data; link.download = a.name; link.textContent = a.name; li.appendChild(link);
-      }
-      ul.appendChild(li);
-    });
-    container.appendChild(ul);
-  }
-}
-
-function openModal() {
-  // ensure signed in
-  if (!isLoggedIn()) { alert('You must sign in to create a post.'); navigateTo('#/admin'); return; }
-  const m = qs('#modal'); m.setAttribute('aria-hidden','false');
-}
-function closeModal() {
-  const m = qs('#modal'); m.setAttribute('aria-hidden','true');
-  const form = qs('#new-post-form');
-  if (form) form.reset();
-  const files = qs('#post-files'); if (files) files.value = '';
-}
-
-function createPostFromForm(ev) {
-  ev.preventDefault();
-  if (!isLoggedIn()) { alert('You must be signed in to create posts.'); navigateTo('#/admin'); return; }
-  const title = qs('#post-title').value.trim();
-  const body = qs('#post-body').value || '';
-  if (!title) { alert('Title is required'); return; }
-  const files = Array.from(qs('#post-files').files || []);
-  const attachments = [];
-  if (files.length === 0) {
-    saveNewPost(title, body, attachments);
-  } else {
-    // read files as data URLs
-    let readCount = 0;
-    files.forEach(f => {
-      const r = new FileReader();
-      r.onload = (e) => {
-        attachments.push({ name: f.name, type: f.type, size: f.size, data: e.target.result });
-        readCount++;
-        if (readCount === files.length) {
-          saveNewPost(title, body, attachments);
-        }
+    if (currentUser) {
+      // edit/delete buttons for admin
+      const controls = document.createElement('div'); controls.style.marginTop = '1rem';
+      const editBtn = document.createElement('button'); editBtn.className = 'btn small'; editBtn.textContent = 'Edit';
+      editBtn.onclick = ()=> openModalForEdit(p.id, p);
+      const delBtn = document.createElement('button'); delBtn.className = 'btn small'; delBtn.style.marginLeft='8px'; delBtn.textContent='Delete';
+      delBtn.onclick = async ()=> {
+        if (!confirm('Delete this post?')) return;
+        try { await deleteDoc(doc(db,'posts',p.id)); alert('Deleted'); navigateTo('#/posts'); }
+        catch(err){ console.error(err); alert('Delete failed'); }
       };
-      r.onerror = () => { readCount++; if (readCount === files.length) saveNewPost(title, body, attachments); };
-      r.readAsDataURL(f);
-    });
+      controls.appendChild(editBtn); controls.appendChild(delBtn);
+      container.appendChild(controls);
+    }
+  } catch (err) {
+    console.error(err); container.innerHTML = '<p>Failed to load post.</p>';
   }
 }
 
-function saveNewPost(title, body, attachments) {
-  const posts = loadPosts();
-  const post = {
-    id: generateId(),
-    title,
-    body,
-    created_at: Date.now(),
-    attachments: attachments || []
-  };
-  posts.push(post);
-  savePosts(posts);
-  closeModal();
-  navigateTo('#/post/' + encodeURIComponent(post.id));
+/* Modal controls (create/edit) */
+function openModal(){
+  if (!currentUser) { alert('You must sign in to create a post.'); navigateTo('#/admin'); return; }
+  qs('#modal-title').textContent = 'New Post';
+  qs('#modal-save').textContent = 'Create Post';
+  qs('#new-post-form').dataset.editId = '';
+  qs('#post-title').value = '';
+  qs('#post-body').innerHTML = '';
+  qs('#modal').setAttribute('aria-hidden','false');
+}
+function openModalForEdit(postId, postObj){
+  qs('#modal-title').textContent = 'Edit Post';
+  qs('#modal-save').textContent = 'Save Changes';
+  qs('#new-post-form').dataset.editId = postId;
+  qs('#post-title').value = postObj.title || '';
+  qs('#post-body').innerHTML = postObj.body || '';
+  qs('#modal').setAttribute('aria-hidden','false');
+}
+function closeModal(){
+  qs('#modal').setAttribute('aria-hidden','true');
+  const form = qs('#new-post-form'); if (form) form.reset();
+  qs('#post-body').innerHTML = '';
 }
 
-function handleExport() {
-  const posts = loadPosts();
-  const blob = new Blob([JSON.stringify(posts, null, 2)], {type:'application/json'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = 'rosary_posts_export.json';
-  document.body.appendChild(a); a.click(); a.remove();
-  URL.revokeObjectURL(url);
+/* Editor toolbar (execCommand used for simple rich text) */
+function setupEditorToolbar(){
+  qsa('#editor-toolbar [data-cmd]').forEach(btn=>{
+    btn.addEventListener('click', ()=> {
+      const cmd = btn.getAttribute('data-cmd');
+      document.execCommand(cmd, false, null);
+      qs('#post-body').focus();
+    });
+  });
+  qs('#insert-link').addEventListener('click', ()=>{
+    const url = prompt('Enter URL (https://...)');
+    if (!url) return;
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) {
+      alert('Select text to turn into a link.');
+      return;
+    }
+    const range = sel.getRangeAt(0);
+    document.execCommand('createLink', false, url);
+  });
+  qs('#insert-image').addEventListener('click', ()=>{
+    const url = prompt('Enter image URL (https://...)');
+    if (!url) return;
+    const img = document.createElement('img');
+    img.src = url;
+    img.style.maxWidth = '100%';
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) {
+      qs('#post-body').appendChild(img);
+    } else {
+      const range = sel.getRangeAt(0);
+      range.deleteContents();
+      range.insertNode(img);
+    }
+  });
 }
 
-function handleImportFile(file) {
+/* Create or update post */
+async function createOrUpdatePost(ev){
+  ev.preventDefault();
+  if (!currentUser) { alert('Sign in first'); navigateTo('#/admin'); return; }
+  const title = qs('#post-title').value.trim();
+  const body = qs('#post-body').innerHTML || '';
+  if (!title) { alert('Title required'); return; }
+  const editId = qs('#new-post-form').dataset.editId || '';
+  try {
+    if (editId) {
+      await updateDoc(doc(db,'posts',editId), { title, body });
+      closeModal();
+      navigateTo('#/post/' + encodeURIComponent(editId));
+    } else {
+      const postsCol = collection(db,'posts');
+      const docRef = await addDoc(postsCol, { title, body, created_at: serverTimestamp() });
+      closeModal();
+      navigateTo('#/post/' + encodeURIComponent(docRef.id));
+    }
+  } catch (err) { console.error(err); alert('Save failed: ' + err.message); }
+}
+
+/* Export / Import (JSON). Import writes each item as a new document. */
+async function handleExport(){
+  try {
+    const posts = await fetchPosts();
+    const data = JSON.stringify(posts.map(p=>{
+      if (p.created_at && p.created_at.toDate) p.created_at = p.created_at.toDate().toISOString();
+      return p;
+    }), null, 2);
+    const blob = new Blob([data], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'rosary_posts_export.json'; document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  } catch (err){ alert('Export failed'); console.error(err); }
+}
+
+async function handleImportFile(file){
   if (!file) return;
   const r = new FileReader();
-  r.onload = (e) => {
+  r.onload = async (e) => {
     try {
       const imported = JSON.parse(e.target.result);
       if (!Array.isArray(imported)) throw new Error('Invalid format');
-      if (!confirm('This will replace your current posts with the imported data. Continue?')) return;
-      savePosts(imported);
+      if (!confirm('This will add the imported posts to Firestore. Continue?')) return;
+      for (const p of imported){
+        const obj = {
+          title: p.title || 'Imported',
+          body: p.body || '',
+          created_at: p.created_at ? new Date(p.created_at) : serverTimestamp()
+        };
+        await addDoc(collection(db,'posts'), obj);
+      }
       alert('Import complete.');
       renderPostsList();
       navigateTo('#/posts');
-    } catch (err) {
-      alert('Failed to import: ' + err.message);
-    }
+    } catch (err) { alert('Failed to import: ' + err.message); console.error(err); }
   };
   r.readAsText(file);
 }
 
-function attemptLogin(ev) {
+/* Login */
+async function attemptLogin(ev){
   ev.preventDefault();
+  const username = qs('#login-username').value.trim();
   const pw = qs('#login-password').value || '';
-  if (pw === CONFIG.ADMIN_PASS) {
-    setLoggedIn(true);
-    alert('Signed in.');
-    navigateTo('#/posts');
-  } else {
-    alert('Invalid password.');
+  if (!username) return alert('Enter a username');
+  const email = usernameToEmail(username);
+  try {
+    await signInWithEmailAndPassword(auth, email, pw);
+    // onAuthStateChanged will handle UI
+  } catch (err) {
+    console.error(err);
+    alert('Sign in failed: ' + (err.message || err));
   }
 }
 
-function navigateTo(hash) {
-  location.hash = hash;
-  handleRouting();
-}
-function handleRouting() {
+/* Routing */
+function navigateTo(hash){ location.hash = hash; handleRouting(); }
+function handleRouting(){
   const hash = location.hash || '#/';
-  if (hash === '#/' || hash === '') {
-    showView('home');
-  } else if (hash.startsWith('#/posts')) {
-    showView('posts');
-  } else if (hash.startsWith('#/post/')) {
+  if (hash === '#/' || hash === '') showView('home');
+  else if (hash.startsWith('#/posts')) showView('posts');
+  else if (hash.startsWith('#/post/')) {
     const id = decodeURIComponent(hash.split('/')[2] || '');
-    showView('post');
-    renderPostDetail(id);
-  } else if (hash.startsWith('#/admin')) {
-    showView('admin');
-  } else {
-    showView('home');
-  }
+    showView('post'); renderPostDetail(id);
+  } else if (hash.startsWith('#/admin')) showView('admin');
+  else showView('home');
 }
 
-// Init
-function init() {
-  // wire nav
-  qs('#nav-home').addEventListener('click', (e)=>{ e.preventDefault(); navigateTo('#/'); });
-  qs('#nav-posts').addEventListener('click', (e)=>{ e.preventDefault(); navigateTo('#/posts'); });
+/* init wiring */
+function init(){
+  qs('#nav-home').addEventListener('click',(e)=>{ e.preventDefault(); navigateTo('#/'); });
+  qs('#nav-posts').addEventListener('click',(e)=>{ e.preventDefault(); navigateTo('#/posts'); });
+  qs('#home-signin').addEventListener('click', ()=> navigateTo('#/admin'));
 
-  qs('#btn-create').addEventListener('click', ()=>{ openModal(); });
+  qs('#btn-create').addEventListener('click', ()=> openModal());
   qs('#modal-close').addEventListener('click', ()=> closeModal());
   qs('#modal-cancel').addEventListener('click', ()=> closeModal());
-  qs('#new-post-form').addEventListener('submit', createPostFromForm);
+  qs('#new-post-form').addEventListener('submit', createOrUpdatePost);
 
   qs('#btn-export').addEventListener('click', handleExport);
-  qs('#importFile').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) handleImportFile(f); e.target.value = ''; });
+  qs('#importFile').addEventListener('change', (e)=> { const f = e.target.files[0]; if (f) handleImportFile(f); e.target.value = ''; });
 
-  // login view
   qs('#login-form').addEventListener('submit', attemptLogin);
   qs('#login-cancel').addEventListener('click', ()=> { navigateTo('#/'); });
 
-  // route on hash change
-  window.addEventListener('hashchange', handleRouting);
-
-  // back to posts button
   qs('#back-to-posts').addEventListener('click', (e)=> { e.preventDefault(); navigateTo('#/posts'); });
 
-  updateAuthArea();
+  setupEditorToolbar();
+
+  window.addEventListener('hashchange', handleRouting);
+
+  onAuthStateChanged(auth, (user)=>{
+    currentUser = user;
+    updateAuthArea();
+    handleRouting();
+  });
+
   handleRouting();
 }
 
