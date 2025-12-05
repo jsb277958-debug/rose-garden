@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>rosary's rose garden</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <nav class="nav">
+      <a id="nav-home" href="#/">Home</a>
+      <span class="sep">|</span>
+      <a id="nav-posts" href="#/posts">Posts</a>
+      <span class="spacer"></span>
+      <span id="auth-area"></span>
+    </nav>
+  </header>
+
+  <main class="container" id="app">
+    <!-- Home view -->
+    <section id="view-home" class="view" aria-hidden="false">
+      <h1>rosary's rose garden</h1>
+      <p class="update">Welcome — simple update: site set up. Share posts with attachments (images/audio/etc.).</p>
+    </section>
+
+    <!-- Posts list view -->
+    <section id="view-posts" class="view" aria-hidden="true">
+      <div class="posts-header">
+        <h1>Posts</h1>
+        <div>
+          <button id="btn-create" class="btn" style="display:none;">Create New Post</button>
+          <button id="btn-export" class="btn secondary">Export</button>
+          <label class="btn upload-like secondary">
+            Import
+            <input id="importFile" type="file" accept="application/json" style="display:none;" />
+          </label>
+        </div>
+      </div>
+
+      <ul id="post-list" class="post-list"></ul>
+      <div id="no-posts" class="muted" style="display:none;">No posts yet.</div>
+    </section>
+
+    <!-- Post detail view -->
+    <section id="view-post" class="view" aria-hidden="true">
+      <div id="post-detail"></div>
+      <p><a id="back-to-posts" href="#/posts" class="btn secondary">Back to posts</a></p>
+    </section>
+  </main>
+
+  <!-- New Post Modal -->
+  <div id="modal" class="modal" aria-hidden="true">
+    <div class="modal-content">
+      <header>
+        <h2>New Post</h2>
+        <button id="modal-close" class="btn small">✕</button>
+      </header>
+      <form id="new-post-form">
+        <label>Title
+          <input id="post-title" name="title" type="text" required />
+        </label>
+        <label>Body
+          <textarea id="post-body" name="body" rows="6"></textarea>
+        </label>
+        <label>Attachments (images, audio, other) — multiple allowed
+          <input id="post-files" name="attachments" type="file" multiple />
+        </label>
+        <div class="modal-actions">
+          <button type="submit" class="btn">Create Post</button>
+          <button type="button" id="modal-cancel" class="btn secondary">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Login Prompt (simple) -->
+  <div id="login-prompt" class="modal" aria-hidden="true">
+    <div class="modal-content">
+      <header>
+        <h2>Admin Login</h2>
+      </header>
+      <form id="login-form">
+        <label>Password
+          <input id="login-password" type="password" required />
+        </label>
+        <div class="modal-actions">
+          <button type="submit" class="btn">Sign in</button>
+          <button type="button" id="login-cancel" class="btn secondary">Cancel</button>
+        </div>
+        <p class="muted small">Note: This is a client-side-only admin password (stored in the page configuration). It is suitable for simple personal use but not secure for public multi-user sites.</p>
+      </form>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
