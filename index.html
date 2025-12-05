@@ -47,6 +47,21 @@
       <div id="post-detail"></div>
       <p><a id="back-to-posts" href="#/posts" class="btn secondary">Back to posts</a></p>
     </section>
+
+    <!-- Admin login view -->
+    <section id="view-admin" class="view" aria-hidden="true">
+      <h1>Admin Login</h1>
+      <form id="login-form" class="form">
+        <label>Password
+          <input id="login-password" type="password" required />
+        </label>
+        <div class="modal-actions">
+          <button type="submit" class="btn">Sign in</button>
+          <button type="button" id="login-cancel" class="btn secondary">Cancel</button>
+        </div>
+        <p class="muted small">Note: This is a client-side-only admin password stored in the page config. Change it in app.js before publishing if you want a different password.</p>
+      </form>
+    </section>
   </main>
 
   <!-- New Post Modal -->
@@ -70,25 +85,6 @@
           <button type="submit" class="btn">Create Post</button>
           <button type="button" id="modal-cancel" class="btn secondary">Cancel</button>
         </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- Login Prompt (simple) -->
-  <div id="login-prompt" class="modal" aria-hidden="true">
-    <div class="modal-content">
-      <header>
-        <h2>Admin Login</h2>
-      </header>
-      <form id="login-form">
-        <label>Password
-          <input id="login-password" type="password" required />
-        </label>
-        <div class="modal-actions">
-          <button type="submit" class="btn">Sign in</button>
-          <button type="button" id="login-cancel" class="btn secondary">Cancel</button>
-        </div>
-        <p class="muted small">Note: This is a client-side-only admin password (stored in the page configuration). It is suitable for simple personal use but not secure for public multi-user sites.</p>
       </form>
     </div>
   </div>
