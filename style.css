@@ -78,3 +78,6 @@ input[type="text"],textarea,input[type="password"]{ width:100%; padding:.5rem; b
 .upload-like{ display:inline-block; background:#777; color:white; border-radius:6px; padding:.4rem .7rem; cursor:pointer }
 
 .bio{ color:var(--muted); margin-top:.6rem; margin-bottom:1rem; max-width:720px; margin-left:auto; margin-right:auto; }
+
+/* small responsive polish */
+@media (max-width:600px){ .posts-header{ flex-direction:column; align-items:flex-start; gap:.6rem } }
